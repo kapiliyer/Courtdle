@@ -3,6 +3,7 @@ import './App.css';
 import axios from 'axios';
 
 const App = () => {
+  const [isLoading, setIsLoading] = useState(true);
   const [currentCaseIndex, setCurrentCaseIndex] = useState(0);
   const [casesInfo, setCasesInfo] = useState([]);
   const [selectedParty, setSelectedParty] = useState(null);
@@ -14,20 +15,25 @@ const App = () => {
   const [isFinalPage, setIsFinalPage] = useState(false);
 
   useEffect(() => {
-    axios.get('/cases_info')
-      .then(response => setCasesInfo(response.data))
-      .catch(error => console.error('Error fetching cases:', error));
-  }, []);
+    if (!isLandingPage && casesInfo.length === 0) {
+      axios.get('http://127.0.0.1:5000/cases_info')
+        .then(response => {
+          setCasesInfo(response.data);
+          setIsLoading(false);
+        })
+        .catch(error => console.error('Error fetching cases:', error));
+    }
+  }, [isLandingPage]);
 
   const handlePartySelection = (party) => {
     setSelectedParty(party);
-    axios.post('/check_answer', {
+    axios.post('http://127.0.0.1:5000/check_answer', {
       case_id: casesInfo[currentCaseIndex].case_id,
       user_choice: party
     })
       .then(response => {
-        setIsCorrect(response.data.correct);
-        setOverallResults([...overallResults, response.data.correct]);
+        setIsCorrect(response.data.correct === 'Correct');
+        setOverallResults([...overallResults, response.data.correct === 'Correct']);
         setShowResult(true);
       })
       .catch(error => console.error('Error checking answer:', error));
@@ -54,11 +60,15 @@ const App = () => {
   if (isLandingPage) {
     return (
       <div className="landing-page">
-        <h1>Welcome to the Supreme Court Case Quiz</h1>
+        <h1>Welcome to the Courtdle</h1>
         <p>You will be shown 5 Supreme Court cases and need to decide who it was decided in favor of.</p>
         <button onClick={() => setIsLandingPage(false)}>Start</button>
       </div>
     );
+  }
+
+  if (isLoading) {
+    return <div>Loading...</div>;
   }
 
   if (isFinalPage) {
@@ -69,10 +79,6 @@ const App = () => {
         <p>Next quiz available in {countdownToMidnight()} seconds.</p>
       </div>
     );
-  }
-
-  if (casesInfo.length === 0) {
-    return <div>Loading...</div>;
   }
 
   const currentCase = casesInfo[currentCaseIndex];
@@ -93,7 +99,7 @@ const App = () => {
           <button
             key={party}
             onClick={() => handlePartySelection(party)}
-            disabled={selectedParty}
+            disabled={!!selectedParty}  // Double negation to ensure it is boolean
           >
             {party}
           </button>
@@ -109,7 +115,7 @@ const App = () => {
           <button onClick={() => setRevealConclusion(!revealConclusion)}>
             {revealConclusion ? 'Hide Conclusion' : 'Show Conclusion'}
           </button>
-          {revealConclusion && <p>{currentCase.conclusion}</p>}
+          {console.log(currentCase.conclusion) && revealConclusion && <p>{currentCase.conclusion}</p>}
         </div>
       )}
       {showResult && (

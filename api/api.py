@@ -1,17 +1,16 @@
 import os
 import json
-import random
-import openai
+from openai import OpenAI
 import oyez_api_wrapper
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 from datetime import date
 
 app = Flask(__name__)
-
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+CORS(app)
+client = OpenAI()
 CACHE_FILE = 'cases_cache.json'
-
-DEFAULT_CASES = [('1919', '437'), ('1926', '3'), ('1949', '272'), ('1950', '336'), ('1969', '492')]
+DEFAULT_CASES = [('1900-1940', '249us47'), ('1900-1940', '274us357'), ('1940-1955', '337us1'), ('1940-1955', '341us494'), ('1968', '492')]
 DEFAULT_THEME = 'Free Speech'
 
 
@@ -39,51 +38,136 @@ def fetch_cases_theme():
     # TODO: Fetch random 5 cases, associated with some random theme
     theme = DEFAULT_THEME
     cases = []
-    for year, docket_number in DEFAULT_CASES:
-        cases.append(oyez_api_wrapper.court_case(year, docket_number))
+    for term, docket in DEFAULT_CASES:
+        cases.append(oyez_api_wrapper.court_case(term, docket))
     return cases, theme
 
 
-# Function to summarize a case using GPT
+# Function to summarize a case
 def summarize_case(case):
-    openai.api_key = OPENAI_API_KEY
-    case_name, *parties = case.get_basic_info()
-    facts = case.get_case_facts()
-    question = case.get_legal_question()
-    
+    print('Fetching case info')
+    try:
+        _, *parties = case.get_basic_info()
+    except:
+        parties = []
+    try:
+        facts = case.get_case_facts()
+    except:
+        facts = ''
+    try:
+        question = case.get_legal_question()
+    except:
+        question = ''
+    print('Got case info')
+
     prompt = (
-        f'Case Name: {case_name}\n'
         f'Parties: {parties}\n'
         f'Facts: {facts}\n'
         f'Legal Question: {question}\n'
         'Summarize the above Supreme Court case details.'
     )
 
-    response = openai.Completion.create(
-        engine='text-davinci-003',
-        prompt=prompt
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": prompt}]
     )
-    summary = response.choices[0].text.strip()
+
+    summary = response.choices[0].message.content.strip()
     return summary
+
+
+# Function to check whether user was correct
+def is_correct(case, user_choice):
+    print('Fetching case info')
+    try:
+        case_name, *parties = case.get_basic_info()
+    except:
+        case_name, parties = '', []
+    try:
+        ruling = case.get_ruling()
+        winning_party = ruling[2]
+    except:
+        winning_party = ''
+    print('Got case info')
+
+    prompt = (
+        f'Respond "Correct" if correct answer was chosen by user, else "Incorrect"\n'
+        f'Case Name: {case_name}\n'
+        f'Choices: {parties}\n'
+        f'Answer (if available, else go off of what you know about the case): {winning_party}\n'
+        f'User choice: {user_choice}'
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": prompt}]
+    )
+
+    correct = response.choices[0].message.content.strip()
+    return correct
+
+# Function to summarize a case's conclusion
+def summarize_case_conclusion(case):
+    print('Fetching case info')
+    try:
+        conclusion = case.get_conclusion()
+    except:
+        conclusion = ''
+    print('Got case info')
+
+    prompt = (
+        f'Conclusion: {conclusion}\n'
+        'Summarize the above Supreme Court case conclusion details.'
+    )
+
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": prompt}]
+    )
+
+    conclusion_summary = response.choices[0].message.content.strip()
+    return conclusion_summary
 
 
 # Endpoint to fetch and summarize cases
 @app.route('/cases_info', methods=['GET'])
 def get_cases_info():
+    print('GET')
+
+    print('Loading cache')
     cache = load_cached_cases()
+    print('Loaded cache')
     if cache and cache['date'] == str(date.today()):
+        print('Got cached result')
         cases_info = cache['cases_info']
     else:
+        print('No cached result')
+        print('Fetching cases')
         cases_info = []
         cases, theme = fetch_cases_theme()
+
         for case in cases:
-            judges = case.get_case_judges()
-            case_name, *parties = case.get_basic_info()
-            question = case.get_legal_question()
+            print(f'Fetching case info for {case.term}.{case.docket}')
+            try:
+                judges = case.get_case_judges()
+            except:
+                judges = []
+            try:
+                case_name, *parties = case.get_basic_info()
+            except:
+                case_name, parties = '', []
+            try:
+                question = case.get_legal_question()
+            except:
+                question = ''
+            print('Got case info')
+
+            print('Fetching GPT summary')
             summary = summarize_case(case)
+            print('Got GPT summary')
 
             cases_info.append({
-                'case_id': f'{case.year}.{case.docket_number}',
+                'case_id': f'{case.term}.{case.docket}',
                 'theme': theme,
                 'judges': judges,
                 'case_name': case_name,
@@ -91,7 +175,11 @@ def get_cases_info():
                 'question': question,
                 'summary': summary,
             })
+
+        print('Got case info')
+        print('Saving cache')
         save_cached_cases(cases_info)
+        print('Saved cache')
 
     return jsonify(cases_info)
 
@@ -99,19 +187,30 @@ def get_cases_info():
 # Endpoint to check user answer
 @app.route('/check_answer', methods=['POST'])
 def check_answer():
+    print('POST')
+
+    print('Fetching answer info')
     data = request.json
     case_id = data['case_id']
     user_choice = data['user_choice']
-    year, docket_number = case_id.split('.')
+    term, docket = case_id.split('.')
+    print('Got answer info')
 
-    case = oyez_api_wrapper.court_case(year, docket_number)
-    ruling = case.get_ruling()
-    winning_party = ruling[2]
-    is_correct = (user_choice == winning_party)
-    decisions = case.get_judge_decisions()
-    conclusion = case.get_conclusion()
+    print('Fetching case info')
+    case = oyez_api_wrapper.court_case(term, docket)
+    try:
+        correct = is_correct(case, user_choice)
+    except:
+        correct = 'Incorrect'
+    try:
+        decisions = case.get_judge_decisions()
+    except:
+        decisions = []
+    print('Got case info')
 
-    return jsonify({'correct': is_correct, 'decisions': decisions, 'conclusion': conclusion})
+    conclusion = summarize_case_conclusion(case)
+
+    return jsonify({'correct': correct, 'decisions': decisions, 'conclusion': conclusion})
 
 
 if __name__ == '__main__':
