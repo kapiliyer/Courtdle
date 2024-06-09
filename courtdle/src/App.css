@@ -1,38 +1,65 @@
-.App {
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  margin: 0;
+  padding: 0;
+}
+
+.landing-page, .final-page, .case-page {
   text-align: center;
+  padding: 20px;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.landing-page h1, .final-page h1, .case-page h1 {
+  font-size: 2em;
+  margin-bottom: 20px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.landing-page p, .final-page p, .case-page p {
+  font-size: 1.2em;
+  margin-bottom: 20px;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+button {
+  padding: 10px 20px;
+  font-size: 1em;
+  cursor: pointer;
+  margin-top: 20px;
 }
 
-.App-link {
-  color: #61dafb;
+.case-page h2 {
+  font-size: 1.5em;
+  margin-bottom: 10px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.summary-box, .conclusion-box {
+  background-color: #fff;
+  border: 1px solid #ccc;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.party-buttons {
+  margin-top: 20px;
+}
+
+.party-buttons button {
+  margin: 5px;
+}
+
+.result {
+  font-size: 1.5em;
+  margin: 20px 0;
+}
+
+.result.correct {
+  color: green;
+}
+
+.result.incorrect {
+  color: red;
+}
+
+.next-case-button {
+  margin-top: 20px;
 }
